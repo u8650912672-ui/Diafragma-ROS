@@ -1,0 +1,19 @@
+#rust build junk
+target/*
+kernel/target/
+xtask/target/
+**/target/
+
+#generated related to iso
+*.iso
+iso_root/*
+limine-uefi-cd.bin
+*.img
+*.fd
+OVMF_VARS*
+
+#editor related
+.vscode/
+.idea/
+*~
+.DS_Store
