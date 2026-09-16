@@ -1,0 +1,1 @@
+set a real ring0 stack in gdt.rs bz rigth now its 0
