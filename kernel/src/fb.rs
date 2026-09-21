@@ -61,12 +61,9 @@ pub fn fb_init() -> bool { //returns true if we get a fb if not... rip
 fn scroll() {
     unsafe {
         let line = PITCH * 16;
-        for i in 0..(PITCH * H - line) {
-            *FB.add(i as usize) = *FB.add((i + line) as usize);
-        }
-        for i in (PITCH * (H - 16))..(PITCH * H) {
-            *FB.add(i as usize) = 0;
-        }
+        let total = PITCH * H;
+        core::ptr::copy(FB.add(line as usize), FB, (total - line) as usize); //overlap ok unlike nonoverlappin
+        core::ptr::write_bytes(FB.add((total - line) as usize), 0, line as usize); //black out last 16 px row
         if ROW > 0 { ROW -= 1; }
     }
 }

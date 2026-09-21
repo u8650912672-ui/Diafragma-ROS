@@ -11,6 +11,12 @@ limine-uefi-cd.bin
 *.img
 *.fd
 OVMF_VARS*
+*.log
+serial.log
+*.swp
+*.bak
+*.orig
+flycheck*
 
 #editor related
 .vscode/
