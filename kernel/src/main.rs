@@ -17,6 +17,8 @@ mod paging;
 mod idt;
 mod pic;
 mod ps2;
+mod shell;
+mod cmd;
 
 use core::arch::asm;
 use core::panic::PanicInfo;
@@ -36,28 +38,6 @@ fn halt() -> ! { loop { unsafe { asm!("hlt"); } } }
     serial::ser_puts("DiafragmaOS has kinda started or booted congrats stuff will break and im a lazy guy press esc halts :3\n");
     if has_fb { fb::fb_puts("you can press buttons esc will halt the OS\n"); }
     unsafe { asm!("sti", options(nomem, nostack, preserves_flags)); } //let irq33 in ig?
-    loop {
-        unsafe { asm!("hlt", options(nomem, nostack, preserves_flags)); } //sleep till irq :D
-        while let Some(sc) = ps2::ps2_poll() {
-            if sc == 0x01 { //esc is now still halt
-                serial::ser_puts("\nEsc HAS BEEN PRESSED OH FUCK *dies*\n");
-                if has_fb { fb::fb_puts("\nWhy would you kill me :c *dies*\n"); }
-                halt();
-            }
-            if let Some(c) = ps2::ps2_cook(sc) {
-                //temp ring0 echo deleted after syscall write tho so we good
-                if c == 8 { //this for backsapce 
-                    serial::ser_puts("\x08");
-                    if has_fb { fb::fb_putc(8); }
-                } else if c == b'\n' {
-                    serial::ser_puts("\n");
-                    if has_fb { fb::fb_putc(b'\n'); }
-                } else {
-                    // serial needs str fb takes u8 instant but it fucking works so we ball :D
-                    serial::ser_puts(core::str::from_utf8(&[c]).unwrap_or("?"));
-                    if has_fb { fb::fb_putc(c); }
-                }
-            }
-        }
-    }
+    shell::shell_run(has_fb);
+    halt();
 }
