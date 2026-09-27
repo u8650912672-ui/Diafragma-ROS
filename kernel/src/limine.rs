@@ -76,3 +76,69 @@ pub fn fb() -> Option<&'static mut Fb> {
         Some(&mut **r.fbs)
     }
 }
+
+#[repr(C)]
+pub struct HhdmResp {
+    pub rev: u64,
+    pub offset: u64, //virt = phys+ offset used to touch tables with consent :3
+}
+
+#[repr(C)]
+pub struct HhdmReq {
+    pub id: [u64; 4],
+    pub rev: u64,
+    pub resp: *mut HhdmResp,
+}
+unsafe impl Sync for HhdmReq {}
+
+#[used]
+#[link_section = ".limine_requests"]
+pub static mut HHDM_REQ: HhdmReq = HhdmReq {
+    id: [COMMON0, COMMON1, 0x48dcf1cb8ad2b852, 0x63984e959a98244b], //thanks random forum online from 2022 and they should work?
+    rev: 0,
+    resp: ptr::null_mut(),
+};
+
+pub fn hhdm() -> Option<u64> {
+    unsafe {
+        let resp = (*addr_of_mut!(HHDM_REQ)).resp as *mut HhdmResp;
+        Some(resp.as_ref()?.offset)
+    }
+}
+
+#[repr(C)]
+pub struct ExecAddrResp {
+    pub rev: u64,
+    pub phys_base: u64, //where kernel lives in ram :p
+    pub virt_base: u64, // and its linked at 0xffffffff80000000 
+}
+
+#[repr(C)]
+pub struct ExecAddrReq {
+    pub id: [u64; 4],
+    pub rev: u64,
+    pub resp: *mut ExecAddrResp,
+}
+
+unsafe impl Sync for ExecAddrReq {}
+
+#[used]
+#[link_section = ".limine_requests"]
+pub static mut EXEC_REQ: ExecAddrReq = ExecAddrReq {
+    id: [COMMON0, COMMON1, 0x71ba76863cc55f63, 0xb2644a48c516a487], //exec addr ids from the same forum as hhdm lol
+    rev: 0,
+    resp: ptr::null_mut(),
+};
+
+pub fn exec_bases() -> Option<(u64, u64)> {
+    unsafe { 
+        let resp = (*addr_of_mut!(EXEC_REQ)).resp as *mut ExecAddrResp;
+        let r = resp.as_ref()?;
+        Some((r.phys_base, r.virt_base))
+    }
+}
+
+pub fn virt_to_phys(v: u64) -> Option<u64> { //virt - virt_base + phys_base, for u marks :D
+    let (pb, vb) = exec_bases()?;
+    Some(v.wrapping_sub(vb).wrapping_add(pb))    
+}

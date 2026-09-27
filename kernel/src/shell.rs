@@ -33,7 +33,7 @@ pub fn shell_run(has_fb: bool) {
                     puts2(b'\n', has_fb);
                     crate::cmd::exec(&line[..n], has_fb);
                     n = 0;
-                    crate::serial::ser_puts("cmd prompt should have ran");
+                    crate::serial::ser_puts("cmd prompt should have ran\n");
                     if has_fb { crate::fb::fb_puts("# -> "); }
                 } else if c == 8 {
                     if n > 0 { n -= 1; puts2(8, has_fb); }

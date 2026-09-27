@@ -44,7 +44,11 @@ use core::arch::naked_asm;
 //default boom handler serial no fb then halt like in the past
 #[unsafe(no_mangle)]
 pub extern "C" fn isr_default() {
-    crate::serial::ser_puts("\nFAULT TRIGGERD OH FUCK SERIAL CHECK IT and ofc REBOOT THE SYSTEM\n");
+    let cs: u16;
+    unsafe { asm!("mov {0:x}, cs", out(reg) cs, options(nomem, nostack, preserves_flags)); }
+    crate::serial::ser_puts("\nFAULT default vec? cs=");
+    hex64(cs as u64);
+    crate::serial::ser_puts(" (Not GP/PF/33 check IDT vec ig?)\n");
     loop { unsafe { asm!("cli; hlt", options(nomem, nostack, preserves_flags)); } }
 }
 // naked stub to push dummy err and vector , then just jump to isr default without regs saved cuz it dont matter either way
@@ -67,10 +71,12 @@ pub fn idt_init() {
         let h = isr_stub_default as u64;
         for i in 0..256 { set_gate(i, h); }//all to default first pre vector next
         set_gate(33, isr_stub_33 as u64); //keyboard has its own stub
+        set_gate(13, isr_stub_13 as u64); //#gp so inb from ring3 tells us not reboot loop
+        set_gate(14, isr_stub_14 as u64); // pf to fb writes to us about cr2 no guessing :3
         let p = IdtPtr { limit: (256 *16 - 1) as u16, base: addr_of!(IDT) as u64 };
         asm!("lidt [{}]", in(reg) &p, options(readonly, nostack, preserves_flags));
     }
-    crate::serial::ser_puts("idt alive, all faults go to default :D\n");
+    crate::serial::ser_puts("idt alive, GP/PF split, kbd on 33 :3\n");
 }
 
 #[unsafe(naked)]
@@ -105,3 +111,78 @@ pub extern "C" fn irq33_handler() {
     crate::ps2::kbd_irq(); //now push the raw scancodes to ring0
     crate::pic::pic_eoi(1); //eoi master only 
 }
+
+fn hex64(n: u64) { //tiny no fmt cuz nostd same vibe as paging hex
+    let h = b"0123456789ABCDEF";
+    crate::serial::ser_puts("0x");
+    for i in 0..16 {
+        let b = h[((n >> (60 - i * 4)) & 0xF) as usize];
+        crate::serial::ser_puts(core::str::from_utf8(&[b]).unwrap_or("?"));
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn isr_gp_handler(err: u64) {
+    let cs: u16;
+    unsafe { asm!("mov {0:x}, cs", out(reg) cs, options(nomem, nostack, preserves_flags)); }
+    crate::serial::ser_puts("\n#GP vec 13 err=");
+    hex64(err);
+    crate::serial::ser_puts(" cs=");
+    hex64(cs as u64);
+    crate::serial::ser_puts(" (0x8=CPL0 bug 0x1B/0x23=cpl3 inb/IOPB is working :3)\n");
+}
+
+
+#[unsafe(no_mangle)]
+pub extern "C" fn isr_pf_handler(err: u64) {
+    let cr2: u64;
+    unsafe { asm!("mov {}, cr2", out(reg) cr2, options(nostack, preserves_flags)); }
+    let cs: u16;
+    unsafe { asm!("mov {0:x}, cs", out(reg) cs, options(nomem, nostack, preserves_flags)); }
+    crate::serial::ser_puts("\n#PF vec 14 err=");
+    hex64(err);
+    crate::serial::ser_puts(" cr2=");
+    hex64(cr2);
+    crate::serial::ser_puts(" cs=");
+    hex64(cs as u64);
+    crate::serial::ser_puts(" (cr2=S-Only page cs 0x8=CPL0 bug else CPL3 u/s working :3)\n");
+    loop { unsafe { asm!("cli; hlt", options(nomem, nostack, preserves_flags)); } }
+}
+
+//stubs cpu pushed Err pop it to rdi first arg then save rest call and halt (never iretq cuz handler halts)
+#[unsafe(naked)]
+pub extern "C" fn isr_stub_13() {
+    naked_asm!(
+       "pop rdi
+       push rax
+       push rcx
+       push rdx
+       push rsi
+       push r8
+       push r9
+       push r10
+       push r11
+       call {f}
+       ud2",
+       f = sym isr_gp_handler,
+    );
+}
+
+#[unsafe(naked)]
+pub extern "C" fn isr_stub_14() {
+    naked_asm!(
+       "pop rdi
+       push rax
+       push rcx
+       push rdx
+       push rsi
+       push r8
+       push r9
+       push r10
+       push r11
+       call {f}
+       ud2",
+       f = sym isr_pf_handler, 
+    );
+}
+

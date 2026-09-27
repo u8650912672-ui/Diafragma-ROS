@@ -28,6 +28,10 @@ pub static mut TSS: Tss = Tss {
     iopb: 0,
 };
 
+#[repr(align(16))]
+struct AlignedStack(pub [u8; 16384]);
+static mut KSTACK: AlignedStack = AlignedStack([0; 16384]); //reaö ring0 yoinker for CPL3 trapping :D
+
 fn set_entry(i: usize, base: u32, limit: u32, access: u8, flags: u8) {
     unsafe {
         GDT[i] = (limit & 0xFFFF) as u64
@@ -86,14 +90,14 @@ pub fn gdt_init() {
     }
     set_entry64(1, 0, 0xFFFFF, 0x9A, 0xA); //ring0 code (0x08) :3
     set_entry64(2, 0, 0xFFFFF, 0x92, 0xC); //ring0 data 0x10
-    set_entry64(3, 0, 0xFFFFF, 0xFA, 0xA); //ring 3 code 0x18 why am i commenting this?
-    set_entry64(4, 0, 0xFFFFF, 0xF2, 0xC); // ring 3 data 0x20
+    set_entry64(3, 0, 0xFFFFF, 0xF2, 0xC); // ring3 data 0x18
+    set_entry64(4, 0, 0xFFFFF, 0xFA, 0xA); //ring3 code 0x20 
     unsafe {
         let tss_base = addr_of!(TSS) as u64;
         let tss_size = core::mem::size_of::<Tss>() as u32;
         set_entry64(5, tss_base, tss_size - 1, 0x89, 0x0); //tss 0x28 fuck i hate math
         (*addr_of_mut!(TSS)).iopb = tss_size as u16; // past end to deny all ports for ring 3 :)
-        (*addr_of_mut!(TSS)).rsp0 = 0; // will set once i have a real ring0 stack mabye its 0 cuz im not gonna lie
+        (*addr_of_mut!(TSS)).rsp0 = addr_of!(KSTACK) as u64 + 16384; //YES
         let p = GdtPtr { limit: (10 * 8 - 1) as u16, base: addr_of!(GDT) as u64 };
         gdt_flush(&p);
         tss_flush();
