@@ -8,8 +8,13 @@ SECTIONS {
   . = ALIGN(0x1000);
   .rodata : {
     *(.rodata .rodata.*)
-    *(.limine_requests_start* .limine_requests* .limine_requests_end*)
     *(.eh_frame* .eh_frame_hdr*)
+  }
+  . = ALIGN(0x1000);
+  .limine_requests : {
+    KEEP(*(.limine_requests_start*))
+    KEEP(*(.limine_requests))
+    KEEP(*(.limine_requests_end*))
   }
   . = ALIGN(0x1000);
   .data : {

@@ -36,8 +36,7 @@ fn halt() -> ! { loop { unsafe { asm!("hlt"); } } }
 #[unsafe(no_mangle)] pub extern "C" fn _start() -> ! {
     serial::ser_init();
     let has_fb = fb::fb_init();
-    gdt::gdt_init(); serial::ser_puts("gdt running :3\n");
-    paging::paging_probe(); idt::idt_init(); pic::pic_init(); ps2::ps2_init(); syscall::syscall_init(); user::user_entry();
+    gdt::gdt_init(); serial::ser_puts("gdt running :3\n"); paging::paging_probe(); idt::idt_init(); pic::pic_init(); ps2::ps2_init(); syscall::syscall_init(); serial::ser_puts("hhdm="); if crate::limine::hhdm().is_some() { serial::ser_puts("ok "); } else { serial::ser_puts("NONE\n"); } serial::ser_puts("exec="); if crate::limine::exec_bases().is_some() { serial::ser_puts("ok\n"); } else { serial::ser_puts("NONE\n"); } user::user_entry();
     serial::ser_puts("DiafragmaOS has kinda started or booted congrats stuff will break and im a lazy guy press esc halts :3\n");
     if has_fb { fb::fb_puts("you can press buttons esc will halt the OS\n"); }
     unsafe { asm!("sti", options(nomem, nostack, preserves_flags)); } //let irq33 in ig?
