@@ -6,6 +6,9 @@ SECTIONS {
     *(.text .text.*)
   }
   . = ALIGN(0x1000);
+  .usertext : { KEEP(*(.usertext*)) }
+  . = ALIGN(0x1000);
+  . = ALIGN(0x1000);
   .rodata : {
     *(.rodata .rodata.*)
     *(.eh_frame* .eh_frame_hdr*)

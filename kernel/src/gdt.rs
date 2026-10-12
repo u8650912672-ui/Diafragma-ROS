@@ -30,7 +30,7 @@ pub static mut TSS: Tss = Tss {
 
 #[repr(align(16))]
 struct AlignedStack(pub [u8; 16384]);
-static mut KSTACK: AlignedStack = AlignedStack([0; 16384]); //reaö ring0 yoinker for CPL3 trapping :D
+pub(crate) static mut KSTACK: AlignedStack = AlignedStack([0; 16384]); //reaö ring0 yoinker for CPL3 trapping :D
 
 fn set_entry(i: usize, base: u32, limit: u32, access: u8, flags: u8) {
     unsafe {

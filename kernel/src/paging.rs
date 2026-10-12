@@ -8,6 +8,9 @@ fn cr3() -> u64 {
     v // cr3 physical addr of pm14, identity mapped so we can read it also fuck you V
 }
 
+fn hhdm_off() -> u64 { crate::limine::hhdm().unwrap_or(0) }
+fn phys_to_virt(p: u64) -> *mut u64 { (p + hhdm_off()) as *mut u64 }
+
 fn hex(n: u64) {
     let h = b"0123456789ABCDEF";
     let mut s = [b'0'; 18];
@@ -46,7 +49,7 @@ static mut NPT: usize = 0;
 
 fn pml4() -> *mut u64 {
     let c = cr3();
-    c as *mut u64 //phys virt for low tables for now cant be botherd
+    phys_to_virt(c) //phys virt for low tables for now cant be botherd
 }
 
 unsafe fn alloc_table(pool: *mut Aligned4096, used: *mut usize) -> *mut u64 {
@@ -57,29 +60,31 @@ unsafe fn alloc_table(pool: *mut Aligned4096, used: *mut usize) -> *mut u64 {
     t
 }
 
-pub unsafe fn mark_user_page(phys: u64) { //exacly 1 4k page splits 2m huge 
+pub unsafe fn mark_user_page(virt: u64) { //exacly 1 4k page splits 2m huge 
     let p4 = pml4();
-    let i4 = ((phys >> 39) & 0x1FF) as usize;
-    let i3 = ((phys >> 30) & 0x1FF) as usize;
-    let i2 = ((phys >> 21) & 0x1FF) as usize;
-    let i1 = ((phys >> 12) & 0x1FF) as usize;
+    let i4 = ((virt >> 39) & 0x1FF) as usize;
+    let i3 = ((virt >> 30) & 0x1FF) as usize;
+    let i2 = ((virt >> 21) & 0x1FF) as usize;
+    let i1 = ((virt >> 12) & 0x1FF) as usize;
     *p4.add(i4) |= 0x4; //U/S bit baby 0x4 :)
-    let p3 = (*p4.add(i4) & 0x000FFFFFFFFFF000) as *mut u64;
+    let p3 = phys_to_virt(*p4.add(i4) & 0x000FFFFFFFFFF000);
     *p3.add(i3) |= 0x4;
-    let p2 = (*p3.add(i3) & 0x000FFFFFFFFFF000) as *mut u64;
+    let p2 = phys_to_virt(*p3.add(i3) & 0x000FFFFFFFFFF000);
     let pt: *mut u64;
-    if *p2.add(i2) & 0x80 != 0 { //still huge splits it before touching page
+    if NPT >= 4 { return; }
+    if *p2.add(i2) & 0x80 != 0 { //still huge splits it before touching page    
         let base = *p2.add(i2) & 0x000FFFFFFFE00000;
         pt = alloc_table(EXTRA_PT.as_mut_ptr(), core::ptr::addr_of_mut!(NPT));
         for i in 0..512 {
             *pt.add(i) = (base + (i as u64) * 0x1000) | 0x3; //present rw still s only
         }
-        *p2.add(i2) = (pt as u64) | 0x7;
+        let pt_phys = crate::limine::virt_to_phys(pt as u64).unwrap_or(pt as u64);
+        *p2.add(i2) = (pt_phys & 0x000FFFFFFFFFF000) | 0x7;
     } else {
-        pt = (*p2.add(i2) & 0x000FFFFFFFFFF000) as *mut u64;
+        pt = phys_to_virt(*p2.add(i2) & 0x000FFFFFFFFFF000);
     }
     *pt.add(i1) |= 0x4; //onlt rhis goes to ring3
-    asm!("invlpg [{}]", in(reg) phys, options(nostack, preserves_flags));
+    asm!("invlpg [{}]", in(reg) virt, options(nostack, preserves_flags));
 }
 pub unsafe fn map_user_range(phys: u64, size: u64) {
     let start = phys & !0xFFF;
@@ -89,4 +94,20 @@ pub unsafe fn map_user_range(phys: u64, size: u64) {
         mark_user_page(a);
         a += 0x1000;
     }
+}
+
+pub unsafe fn pte_of(phys: u64) -> u64 { // read back for verification same walk as mark no OR ._.
+    let p4 = pml4();
+    let i4 = ((phys >> 39) & 0x1FF) as usize;
+    let i3 = ((phys >> 30) & 0x1FF) as usize;
+    let i2 = ((phys >> 21) & 0x1FF) as usize;
+    let i1 = ((phys >> 12) & 0x1FF) as usize;
+    if *p4.add(i4) & 1 == 0 { return 0; }
+    let p3 = phys_to_virt(*p4.add(i4) & 0x000FFFFFFFFFF000);
+    if *p3.add(i3) & 1 == 0 { return 0; }
+    let p2 = phys_to_virt(*p3.add(i3) & 0x000FFFFFFFFFF000);
+    if *p2.add(i2) & 1 == 0 { return 0; }
+    if *p2.add(i2) & 0x80 != 0 { return *p2.add(i2); } // giant but not pt yet :3?
+    let pt = phys_to_virt(*p2.add(i2) & 0x000FFFFFFFFFF000);
+    *pt.add(i1)
 }

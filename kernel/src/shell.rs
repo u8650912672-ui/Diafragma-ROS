@@ -23,11 +23,7 @@ pub fn shell_run(has_fb: bool) {
     loop {
         unsafe { asm!("hlt", options(nomem, nostack, preserves_flags)); }
         while let Some(sc) = crate::ps2::ps2_poll() {
-            if sc == 0x01 { //this is to be deleted in short
-                crate::serial::ser_puts("\nEsc detected stopping\n");
-                if has_fb { crate::fb::fb_puts("\nesc detected halting machine\n"); }
-                loop { unsafe { asm!("cli; hlt", options(nomem, nostack, preserves_flags)); } }
-            }
+            if sc == 0x01 { continue; }
             if let Some(c) = crate::ps2::ps2_cook(sc) {
                 if c == b'\n' {
                     puts2(b'\n', has_fb);
@@ -38,9 +34,8 @@ pub fn shell_run(has_fb: bool) {
                 } else if c == 8 {
                     if n > 0 { n -= 1; puts2(8, has_fb); }
                 } else if n < 127 {
-                    line[n] = c; n += 1;
-                    puts2(c, has_fb);
-                }
+                    line[n]=c; n+=1; puts2(c,has_fb);
+                } else { puts2(7, has_fb); }
             }
         }
     }

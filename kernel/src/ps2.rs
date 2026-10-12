@@ -79,16 +79,16 @@ fn hexb(b: u8) { //temp debug
 
 pub fn ps2_poll() -> Option<u8> {
     unsafe {
-        asm!("cli", options(nomem, nostack, preserves_flags));
-        let v = if KHEAD == KTAIL { None } else {
-            let b = KBUF[KTAIL];
-            KTAIL = (KTAIL + 1) % BUFN;
-            Some(b)
+        let f: u64;
+        asm!("pushfq; pop {}; cli", out(reg) f, options(nomem, nostack));
+        let v = if KHEAD==KTAIL { None } else {
+            let b = KBUF[KTAIL]; KTAIL=(KTAIL+1)%BUFN; Some(b)
         };
-        asm!("sti", options(nomem, nostack, preserves_flags));
-        v
+        asm!("push {}; popfq", in(reg) f, options(nomem, nostack));
+        v 
     }
 }
+
 
 //horror if you go beyond
 //YOU HAVE BEEN WARNED
@@ -98,6 +98,7 @@ pub fn ps2_poll() -> Option<u8> {
 static mut SHIFTED1: bool = false; //for shifty styff
 static mut CAPSLOCK: bool = false; //OPPS CAPS LOCK IS STUCK
 static mut EEE: bool = false; //who the fuck even uses this anyways this is a very nice copy paste
+static mut E1N: u8 = 0;
 
 static NORMAL: [u8; 128] = [
     0, 27, b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', b'-', b'=', 8,
@@ -125,8 +126,10 @@ static SHIFTED2: [u8; 128] = [
 
 pub fn ps2_cook(sc: u8) -> Option<u8> { //raw hex into letts none = spooky letter rewritten from c to rust basicly the same
     unsafe {
-        if EEE { EEE = false; return None; } //fuck this for now idk?
-        if sc == 0xE0 { EEE = true; return None; }
+        if sc==0xE1 { E1N=2; EEE=false; return None; }
+        if E1N>0 { E1N-=1; return None; }
+        if EEE { EEE=false; return None; }
+        if sc==0xE0 { EEE=true; return None; }
         if sc & 0x80 != 0 { //release go brrrrr hihi
             let k = sc & 0x7F;
             if k == 0x2A || k == 0x36 { SHIFTED1 = false ; }
