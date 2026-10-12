@@ -24,7 +24,7 @@ pub fn shell_run(has_fb: bool) {
         unsafe { asm!("hlt", options(nomem, nostack, preserves_flags)); }
         while let Some(sc) = crate::ps2::ps2_poll() {
             if sc == 0x01 { continue; }
-            if let Some(c) = crate::ps2::ps2_cook(sc) {
+            if let Some(c) = crate::ps2::ps2_cock(sc) {
                 if c == b'\n' {
                     puts2(b'\n', has_fb);
                     crate::cmd::exec(&line[..n], has_fb);

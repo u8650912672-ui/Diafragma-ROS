@@ -78,6 +78,7 @@ fn halt() -> ! { loop { unsafe { asm!("hlt"); } } }
     
     unsafe { asm!("sti", options(nomem, nostack, preserves_flags)); } //let irq33 in ig?
     // shell::shell_run(has_fb);
+    crate::ps2::focus_user(); crate::ps2::flush_user();
     crate::user::user_stack_fill();
     crate::serial::ser_puts("entering ring3 like normal :3\n");
     crate::user::ring3_enter();

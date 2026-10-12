@@ -18,9 +18,17 @@ pub fn user_stack_fill() { //poke msg into ustack before entry so stub has a val
 #[unsafe(naked)]
 pub extern "C" fn user_stub() -> ! {
     core::arch::naked_asm!(
-        "mov rax, 1", "syscall", //N write(rdi = base rsi = len and set by ring3 enter)
-        "mov rax, 2", "syscall", //n exit dies :3
-        "2: hlt", "jmp 2b",
+        "mov rbx, rdi",
+        "mov rax, 1", "syscall",
+        "2:",
+        "mov rax, 0", "syscall",
+        "cmp rax, -2", "je 2b",
+        "cmp rax, 0x1B", "je 3f",
+        "mov [rbx], al",
+        "mov rax, 1", "mov rdi, rbx", "mov rsi, 1", "syscall",
+        "jmp 2b",
+        "3:", "mov rax, 2", "syscall",
+        "hlt", "jmp 3b",
     );
 }
 pub fn user_stack_range() -> (u64, u64) {

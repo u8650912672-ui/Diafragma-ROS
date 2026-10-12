@@ -48,13 +48,13 @@ fn user_ptr_ok(ptr: u64, len: u64) -> bool {
     if len == 0 || len > 256 { return false; } //cap so no heap games
     if ptr == 0 { return false; }
     if ptr.checked_add(len).is_none() { return false; }
-    if ptr + len > 0x0000800000000000 { return false; }
     true
 }
 
 fn user_range_mapped(ptr: u64, len: u64) -> bool {
     let s = ptr & !0xFFF; let e = (ptr+len+0xFFF) & !0xFFF;
     let mut a = s; while a < e {
+        if ptr.checked_add(len).is_none() { return false; }
         let p = unsafe { crate::paging::pte_of(a) };
         if p & 1 == 0 || p & 4 == 0 { return false; }
         a += 0x1000;
@@ -67,11 +67,11 @@ fn do_read_key() -> u64 { //blocking sleeps with hlt till irq33
         //drain one cahr if present
         let sc_opt: Option<u8> = {
             // raw poll
-            crate::ps2::ps2_poll()
+            crate::ps2::ps2_poll_user()
         };
         if let Some(sc) = sc_opt {
             if sc == 0x01 { return 0x1B; }//esc raw exit
-            if let Some(c) = crate::ps2::ps2_cook(sc) {
+            if let Some(c) = crate::ps2::ps2_cook_user(sc) {
                 if c < 0x80 { return c as u64; } //ascii only 
                 //if none ascii? uhhhhhhhh nah impossible :3 istg this will fuck me later
             }
@@ -128,6 +128,9 @@ pub extern "C" fn syscall_handler() {
         N_WRITE => do_write(a, b),
         N_EXIT => { //replaces esc halt later this is the last RING0 elevation user can do for now
             crate::serial::ser_puts("\nexit() called dies\n");
+            crate::ps2::focus_kernel();
+            crate::ps2::flush_user();
+            crate::ps2::flush_kernel();
             loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack, preserves_flags)); } }
         }
         _ => u64::MAX, // if unknown num = byeeee >:3
