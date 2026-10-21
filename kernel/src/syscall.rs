@@ -5,6 +5,9 @@ pub const N_WRITE: u64 = 1; // write ptr and len 256B ascii only cap so there is
 pub const N_EXIT: u64 = 2; // replaces ESC halt later 
 pub const EFER_SCE: u64 = 1; // syscall enable bit in the EFER
 pub const FMASK_IF: u64 = 0x200; //clear IF on entry so no irq mids syscall TF/DF later
+pub const N_CLEAR: u64 = 3;
+pub const N_CMD: u64 = 4; //ring3 asks the kernel to run any cmd as the kernel owns the table making for good security :3
+
 use core::arch::asm;
 
 fn wrmsr(msr: u32, v: u64) {
@@ -54,9 +57,9 @@ fn user_ptr_ok(ptr: u64, len: u64) -> bool {
 fn user_range_mapped(ptr: u64, len: u64) -> bool {
     let s = ptr & !0xFFF; let e = (ptr+len+0xFFF) & !0xFFF;
     let mut a = s; while a < e {
-        if ptr.checked_add(len).is_none() { return false; }
         let p = unsafe { crate::paging::pte_of(a) };
         if p & 1 == 0 || p & 4 == 0 { return false; }
+        if p & 0x8000000000000 != 0 { return false; } //nx cap kernel :3
         a += 0x1000;
     } true
 }
@@ -112,6 +115,37 @@ fn do_write(ptr: u64, len: u64) -> u64 {
     len //return bytes written just like real oses do
 }
 
+fn do_cmd(ptr: u64, len: u64) -> u64 { //kernel cmd table just for comparing so far :3
+    if !user_ptr_ok(ptr, len) { return u64::MAX; }
+    if !user_range_mapped(ptr, len) { return u64::MAX; }
+    let mut buf = [0u8; 256];
+    unsafe {
+        for i in 0..(len as usize) {
+            let b = *(ptr as *const u8).add(i);
+            if b >= 0x80 { return u64::MAX; }
+            buf[i] = b;
+        }
+        let s = &buf[..len as usize];
+        if s == b"patpat" {
+            crate::serial::ser_puts("command used patpat was Sucsesfull\n");
+            if crate::fb::fb_on() { crate::fb::fb_puts("\nthis is depricated test command\n"); }
+        } else if s == b"clear" {
+            crate::serial::ser_puts("command used clear was Sucsesfull\n");
+            if crate::fb::fb_on() { crate::fb::fb_clear(); }
+        } else if s == b"help" {
+            crate::serial::ser_puts("command help was used and hopefully is displaying\n");
+            if crate::fb::fb_on() { crate::fb::fb_puts("\ncommands are: \npatpat DEPRICATED\nclear\nhelp\n:3\n"); }
+        } else if s.len() > 0 {
+            crate::serial::ser_puts("ERR1 it was a missinput  MISSINPUT CALM DOWN YOU CALM THE FUCK DOWN IT WAS A MISSINPUT\n");
+            if crate::fb::fb_on() { crate::fb::fb_puts("\ncheck the command it migth be case SenSItivE :)\n"); }
+        }
+    }
+    if crate::fb::fb_on() { crate::fb::fb_puts("# -> "); } //kernel owns ze prompt tihi :3
+    0    
+}
+
+
+
 pub extern "C" fn syscall_handler() {
     let (num, a, b): (u64, u64, u64);
     unsafe {
@@ -133,6 +167,12 @@ pub extern "C" fn syscall_handler() {
             crate::ps2::flush_kernel();
             loop { unsafe { core::arch::asm!("cli; hlt", options(nomem, nostack, preserves_flags)); } }
         }
+        N_CLEAR => {
+            crate::serial::ser_puts("\n");
+            if crate::fb::fb_on() { crate::fb::fb_clear(); crate::fb::fb_puts("# -> "); }
+            0
+        }
+        N_CMD => do_cmd(a, b),
         _ => u64::MAX, // if unknown num = byeeee >:3
     };
     unsafe {

@@ -65,6 +65,13 @@ fn halt() -> ! { loop { unsafe { asm!("hlt"); } } }
             crate::paging::mark_user_page(caddr);
             let a2 = crate::paging::pte_of(caddr);
             crate::serial::ser_puts("U stub: "); ph(b2); crate::serial::ser_puts("->"); ph(a2); crate::serial::ser_puts("\n");
+            let (udata_addr, udata_len) = user::user_data_range();
+            if let Some(_udp) = crate::limine::virt_to_phys(udata_addr) {
+                let b3 = crate::paging::pte_of(udata_addr);
+                crate::paging::mark_user_page(udata_addr);
+                let a3 = crate::paging::pte_of(udata_addr);
+                crate::serial::ser_puts("u data: "); ph(b3); crate::serial::ser_puts("->"); ph(a3); crate::serial::ser_puts("\n");
+            }
             //second half of stub if straddles? ( i want cuddles not straddels :3) user_code_range len 4096 is for 1 page enough for stub if not more then 4k and it wont be i think;-; and yea...
             let _ = (slen, clen);
             crate::serial::ser_puts("user pages marked u verified they are safe (probably) :3\n");
@@ -73,14 +80,14 @@ fn halt() -> ! { loop { unsafe { asm!("hlt"); } } }
         }
     } 
 
-    serial::ser_puts("DiafragmaOS has kinda started or booted congrats stuff will break and im a lazy guy press esc halts :3\n");
-    if has_fb { fb::fb_puts("you can press buttons esc will halt the OS\n"); }
+    serial::ser_puts("DiafragmaOS has been booted :3 \n");
     
     unsafe { asm!("sti", options(nomem, nostack, preserves_flags)); } //let irq33 in ig?
     // shell::shell_run(has_fb);
     crate::ps2::focus_user(); crate::ps2::flush_user();
     crate::user::user_stack_fill();
     crate::serial::ser_puts("entering ring3 like normal :3\n");
+    if has_fb { crate::fb::fb_puts("# -> "); }
     crate::user::ring3_enter();
     halt();
 }

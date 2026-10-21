@@ -7,6 +7,7 @@ SECTIONS {
   }
   . = ALIGN(0x1000);
   .usertext : { KEEP(*(.usertext*)) }
+  .userdata : { KEEP(*(.userdata*)) }
   . = ALIGN(0x1000);
   . = ALIGN(0x1000);
   .rodata : {
